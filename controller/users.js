@@ -4,11 +4,11 @@ const User = require("../service/schemas/users");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const Joi = require("joi");
+const uploadFunctions = require("../config/config-multer");
 
 const registerUser = async (req, res, next) => {
   const { error, value } = validateUser(req.body);
   const { email, password } = value;
-  const user = await User.findOne({ email });
   if (error) {
     res.status(400).json({
       status: "failure",
@@ -16,6 +16,7 @@ const registerUser = async (req, res, next) => {
       error: error.details,
     });
   } else {
+    const user = await User.findOne({ email });
     if (user) {
       return res.status(409).json({
         status: "error",
@@ -80,13 +81,6 @@ const loginUser = async (req, res, next) => {
 };
 
 const logoutUser = async (req, res, mext) => {
-  if (!req.user || !req.user._id) {
-    res.status(401).json({
-      status: "failure",
-      code: 401,
-      message: "Not authorized",
-    });
-  }
   const userId = req.user._id;
   try {
     await service.logoutUser(userId);
@@ -98,15 +92,8 @@ const logoutUser = async (req, res, mext) => {
 };
 
 const checkCurrentUser = async (req, res, next) => {
-  if (!req.user || !req.user._id) {
-    res.status(401).json({
-      status: "failure",
-      code: 401,
-      message: "Not authorized",
-    });
-  }
+  const userId = req.user._id;
   try {
-    const userId = req.user._id;
     const user = await service.getCurrentUser(userId);
     if (!user) {
       return res.status(401).json({
@@ -135,7 +122,6 @@ const updateUserSubscription = async (req, res, next) => {
   if (error) {
     return res.status(400).json({ message: error.details[0].message });
   }
-
   try {
     const userId = req.user._id;
     const { subscription } = req.body;
@@ -158,10 +144,36 @@ const updateUserSubscription = async (req, res, next) => {
   }
 };
 
+const updateUserAvatar = async (req, res, next) => {
+  const userId = req.user._id;
+  try {
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ message: "No file uploaded!" });
+    }
+    const newFilePath = await uploadFunctions.processAndValidateImage(
+      file.path
+    );
+    if (!newFilePath) {
+      return res.status(500).json({ message: "Error processing file" });
+    }
+
+    const avatarURL = newFilePath.replace(/\\/g, "/").split("/public/").pop();
+
+    const updatedUser = await service.updateAvatar(userId, avatarURL);
+
+    res.json({ avatarURL: updatedUser.avatarURL });
+  } catch (err) {
+    console.log(error.message);
+    next(err);
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
   logoutUser,
   checkCurrentUser,
   updateUserSubscription,
+  updateUserAvatar,
 };
